@@ -2,7 +2,6 @@ import sys
 import os
 import json
 import time
-import subprocess
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QLineEdit, QSpinBox, QComboBox, QFileDialog,

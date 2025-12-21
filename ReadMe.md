@@ -7,4 +7,7 @@
 - 安装Pandas和Pyside6库
 `pip install pandas`
 `pip install pyside6`
-- 运行bat文件
+- 按照"名单模板.xlsx"的提示填充数据
+- 打开布局编辑器创建布局
+- 打开主程序导入学生列表和布局
+- 选择并开始随机

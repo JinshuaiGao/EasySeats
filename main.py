@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QColor, QFont
-
+import shutil
 import lib
 
 
@@ -19,7 +19,7 @@ class NameDialog(QDialog):
 
     def __init__(self, default_name="", parent=None):
         super().__init__(parent)
-        self.setWindowTitle("输入文件名称")
+        self.setWindowTitle("输入名称")
         self.setModal(True)
         self.setFixedSize(300, 120)
 
@@ -30,7 +30,7 @@ class NameDialog(QDialog):
         name_label = QLabel("名称:")
         self.name_edit = QLineEdit()
         self.name_edit.setText(default_name)
-        self.name_edit.setPlaceholderText("请输入文件名称")
+        self.name_edit.setPlaceholderText("请输入名称")
         name_layout.addWidget(name_label)
         name_layout.addWidget(self.name_edit)
         layout.addLayout(name_layout)
@@ -155,9 +155,9 @@ class ResultWindow(QDialog):
 
         # 双向绑定信号
         self.binding_slider.valueChanged.connect(self.binding_spinbox.setValue)
-        self.binding_slider.valueChanged.connect(self.update_size_rate)
+        self.binding_slider.valueChanged.connect(self.update_size)
         self.binding_spinbox.valueChanged.connect(self.binding_slider.setValue)
-        self.binding_spinbox.valueChanged.connect(self.update_size_rate)
+        self.binding_spinbox.valueChanged.connect(self.update_size)
 
         control_layout.addWidget(self.binding_slider)
         control_layout.addWidget(self.binding_spinbox)
@@ -206,54 +206,20 @@ class ResultWindow(QDialog):
             self.is_fullscreen = True
             self.fullscreen_btn.setText("退出全屏")  # 进入全屏时显示"退出全屏"
 
-    def update_size_rate(self, value):
+    def update_size(self, value):
         """当缩放更新时执行"""
+
+        # 计算字体大小
         self.size_rate = value/100
         self.f_head_fontPixel = int(self.o_head_fontPixel*self.size_rate)
         self.f_name_fontPixel = int(self.o_name_fontPixel*self.size_rate)
-        self.auto_adjust()
+        
+        # 更新QFont
+        self.change_QFont()
 
-    def auto_adjust(self):
-        """自动调整"""
-        stus = self.stu_dic
-        unit = self.display_unit
-        ways = self.way_columns
+        # 刷新表格
+        self.table_update()
 
-        # 计算所需的尺寸
-        head_height_pixel = int(self.f_head_fontPixel*2)  # 讲台行的高度
-
-        # 寻找最长名字
-        __lengths = []
-        for i in stus.values():
-            name: str = i['name']
-            __lengths.append(len(name))
-        max_length = max(__lengths)
-
-        # 姓名单元格尺寸
-        normal_weight_pixel = int(max_length*self.f_name_fontPixel*1.7)
-        normal_height_pixel = int(self.f_name_fontPixel*1.4)
-
-        way_weight_pixel = int(normal_weight_pixel*0.6)  # 过道列的宽度
-
-        # 更改尺寸
-        table = self.table_widget
-
-        # 更改讲台行高
-        table.setRowHeight(0, head_height_pixel)
-
-        # 更改普通尺寸
-        for column_index in range(0, unit[0]+1):
-            table.setColumnWidth(column_index, normal_weight_pixel)
-        for row_index in range(1, unit[1]+1):
-            table.setRowHeight(row_index, normal_height_pixel)
-
-        # 覆写过道列宽
-        for column_index in ways:
-            table.setColumnWidth(column_index, way_weight_pixel)
-
-        # 更改字号
-        self.reFont()
-    
     def change_QFont(self):
         """QFont更新"""
         self.head_font.setFamily("Microsoft YaHei")
@@ -263,42 +229,7 @@ class ResultWindow(QDialog):
         self.name_font.setFamily("KaiTi")
         self.name_font.setPixelSize(self.f_name_fontPixel)
 
-    def reFont(self):
-        """调整字号"""
-        self.change_QFont()
-        stu_dic = self.stu_dic
-        table = self.table_widget
-
-        # 更改学生
-        for key in stu_dic.keys():
-            # 解析位置
-            coords = key.strip('()').split(',')
-            x, y = int(coords[0].strip()), int(coords[1].strip())+1
-
-            # 解析学生信息
-            stu_dict = stu_dic[key]
-            name = stu_dict['name']
-            sex = stu_dict['sex']
-
-            # 填充数据
-            item = QTableWidgetItem(name)
-            item.setFont(self.name_font)
-            item.setTextAlignment(Qt.AlignCenter)
-            # 根据性别设置不同的背景色
-            if sex:
-                item.setBackground(QColor("#87CEEB"))
-            else:
-                item.setBackground(QColor("#FFB6C1"))
-            table.setItem(y, x, item)
-        
-        # 更改讲台
-        item = QTableWidgetItem("讲台")
-        item.setFont(self.head_font)
-        item.setTextAlignment(Qt.AlignCenter)
-        item.setBackground(QColor("#C7C7C7"))
-        table.setItem(0, 0, item)
-
-    def show_table_data(self, data):
+    def first_show_table_data(self, data):
         """首次填充文字、合并单元格、调整缩放"""
         table = self.table_widget
 
@@ -320,12 +251,29 @@ class ResultWindow(QDialog):
         table.setRowCount(rows)
         table.setColumnCount(columns)
 
-        stu_dic = classs.get_processed_data()
-
         # 重复利用传参
-        self.stu_dic = stu_dic
+        self.stu_dic = classs.get_processed_data()
         self.display_unit = classs.display_unit()
 
+        # 合并过道并记录过道列
+        ways = classs.way_gather()
+        self.way_columns = ways  # 存储过道列索引
+        for i in ways:
+            table.setSpan(1, i, rows-1, 1)
+        
+        # 合并讲台
+        table.setSpan(0, 0, 1, columns)
+
+        self.table_update()
+    
+    def table_update(self):
+        """表格更新"""
+        stu_dic = self.stu_dic
+        table = self.table_widget
+        unit = self.display_unit
+        ways = self.way_columns
+
+        '''刷新单元格内容'''
         # 放置学生
         for key in stu_dic.keys():
             # 解析位置
@@ -347,22 +295,48 @@ class ResultWindow(QDialog):
             else:
                 item.setBackground(QColor("#FFB6C1"))
             table.setItem(y, x, item)
+        
+            # 讲台
+            item = QTableWidgetItem("讲台")
+            item.setBackground(QColor("#C7C7C7"))
+            item.setFont(self.head_font)
+            item.setTextAlignment(Qt.AlignCenter)
+            table.setItem(0, 0, item)
+        
+        '''刷新单元格大小'''
+        # 计算讲台行的高度
+        head_height_pixel = int(self.f_head_fontPixel*2)
 
-        # 合并过道并记录过道列
-        ways = classs.way_gather()
-        self.way_columns = ways  # 存储过道列索引
-        for i in ways:
-            table.setSpan(1, i, rows-1, 1)  # 修正行跨度
+        # 寻找最长名字
+        __lengths = []
+        for i in stu_dic.values():
+            name: str = i['name']
+            __lengths.append(len(name))
+        max_length = max(__lengths)
 
-        # 合并讲台
-        item = QTableWidgetItem("讲台")
-        item.setBackground(QColor("#C7C7C7"))
-        item.setFont(self.head_font)
-        item.setTextAlignment(Qt.AlignCenter)
-        table.setItem(0, 0, item)
-        table.setSpan(0, 0, 1, columns)
+        # 计算姓名单元格尺寸
+        normal_weight_pixel = int(max_length*self.f_name_fontPixel*1.7)
+        normal_height_pixel = int(self.f_name_fontPixel*1.4)
 
-        self.auto_adjust()
+        # 计算过道列的宽度
+        way_weight_pixel = int(normal_weight_pixel*0.6)
+
+        # 更改表格尺寸
+        table = self.table_widget
+
+        # 更改讲台行高
+        table.setRowHeight(0, head_height_pixel)
+
+        # 更改普通尺寸
+        for column_index in range(0, unit[0]+1):
+            table.setColumnWidth(column_index, normal_weight_pixel)
+        for row_index in range(1, unit[1]+1):
+            table.setRowHeight(row_index, normal_height_pixel)
+
+        # 更改过道列宽
+        for column_index in ways:
+            table.setColumnWidth(column_index, way_weight_pixel)
+        
 
 
 class MainWindow(QMainWindow):
@@ -548,7 +522,6 @@ class MainWindow(QMainWindow):
             file_name = time.strftime("%Y%m%d_%H%M%S", time.localtime())
 
             # 将文件复制到存储文件夹
-            import shutil
             dest_path = os.path.join(
                 self.layouts_folder, f"{file_name}.json")
             shutil.copy2(file_path, dest_path)
@@ -650,7 +623,7 @@ class MainWindow(QMainWindow):
         self.result_window = ResultWindow(self)
 
         # 使用新的方法显示表格数据
-        self.result_window.show_table_data(data)
+        self.result_window.first_show_table_data(data)
 
         # 显示窗口
         self.result_window.exec()

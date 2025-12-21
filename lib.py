@@ -201,13 +201,14 @@ class Student_Operate():
         self.name = ''
 
     def read_from_xlsx(self, path):
-        xlsx = pd.read_excel(path, header=0)
-        for row in xlsx.itertuples(index=False, name=None):
+        xlsx = pd.read_excel(path, header=0, usecols=[0, 1, 2], skiprows=[0]) # 只读取前三列，跳过表头和示例
+        for row in xlsx.itertuples(index=True, name=None):
             if row[2] == "男":
                 sex = True
             else:
                 sex = False
             self.stu_list.append(Student(str(row[0]), str(row[1]), sex))
+
     def read_from_json(self, path):
         with open(path, 'r', encoding='utf-8') as j:
             data = json.load(j)

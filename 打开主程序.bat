@@ -1,3 +1,3 @@
 @echo off
-start "" pythonw.exe "__main__.py"
+start "" pythonw.exe "main.py"
 exit
